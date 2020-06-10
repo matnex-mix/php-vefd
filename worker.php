@@ -24,6 +24,7 @@
     }
 
     public function stepOne( $bus_data ){
+      $bus_data = str_replace( '"', '\'', $bus_data );
       $content = $this->e->encrypt( $bus_data );
       $sign = base64_encode( md5($content, TRUE) );
 
@@ -51,6 +52,7 @@
     }
 
     public function stepThree( $bus_data ){
+      $bus_data = str_replace( '"', '\'', $bus_data );
       $content = $this->e->encrypt( $bus_data );
       $sign = base64_encode( md5( $content, TRUE ));
       $this->r = new RSA("-----BEGIN PRIVATE KEY-----\n".wordwrap( $this->stepTwoResult['secret'], 64 )."\n-----END PRIVATE KEY-----");
@@ -84,11 +86,3 @@
     }
 
   }
-
-  $worker = new Worker( '04079698', [
-    [ "520404079698", "000000", "R-R-01" ],
-    [ "010100001129", "000000", "R-R-02" ]
-  ] );
-  $worker->stepOne("{'license': '520404079698', 'sn': 'LAMASAT INTERNATIONAL LTD', 'sw_version': '1.2', 'model': 'IP-100', 'manufacture': 'Inspur', 'imei': '100159197500000', 'os': 'linux2.6.36', 'hw_sn': ''}");
-  $worker->stepThree("{'id': '010100001129'}");
-  print_r( $worker->done() );
