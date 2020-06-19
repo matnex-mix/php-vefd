@@ -1,61 +1,69 @@
 <?php
 
-if( !empty($_POST['done']) ){
-  include('worker.php');
+  require_once('PHP-Vefd/worker.php');
 
-  $one_conf = explode(",", trim($_POST['one_conf']));
-  $one_data = $_POST['one_data'];
+  $methods = [
+    "init" => "VEFD Initialization",
+    "taxInfoApply" => "Tax Information Application",
+    "notifySuccess" => "Success notification",
+    "taxInfoMod" => "Tax Information Modification",
+    "invoiceUpload" => "Invoice Upload (not completed)",
+    "timeSync" => "Time Synchronization",
+    "invoiceQuery" => "Invoice Query",
+    "ipUpdate" => "Server Ip Ammendment",
+    "hMonitor" => "Heartbeat Monitor",
+    "alarmNotify" => "Alarm Notification",
+    "reactivate" => "VEFD Reactivation",
+  ];
 
-  $two_conf = explode(",", trim($_POST['two_conf']));
-  $two_data = $_POST['two_data'];
+  $resp = '';
+  $data = '{"id": "010100001129"}';
+  $method = '';
 
-  $worker = new Worker( $_POST['key'], [
-    $one_conf,
-    $two_conf
-  ] );
-  $worker->stepOne($one_data);
-  $worker->stepThree($two_data);
-  print_r( $worker->done() );
-  /*$worker = new Worker( '04079698', [
-    [ "520404079698", "000000", "R-R-01" ],
-    [ "010100001129", "000000", "R-R-02" ]
-  ] );
-  $worker->stepOne('{"license": "520404079698", "sn": "LAMASAT INTERNATIONAL LTD", "sw_version": "1.2", "model": "IP-100", "manufacture": "Inspur", "imei": "100159197500000", "os": "linux2.6.36", "hw_sn": ""}');
-  $worker->stepThree('{"id": "010100001129"}');
-  print_r( $worker->done() );*/
-  die("<br/><br/><h3>NB: Make sure you have access to INTERNET</h3>");
-}
+  if( isset($_GET['submit']) ){
+    $obj = new EFDWorker();
+
+    $obj->Device = '010100001129';
+    #$obj->Device = '520404079698';
+    $obj->Serial = '000000';
+
+    $obj->loadKey(__DIR__.'/KEY.pem');
+
+    $method = $_GET['api'];
+    $data = $_GET['data'];
+
+    try {
+      $resp = $obj->$method( json_decode( $data, TRUE ) );
+    }
+    catch( \Throwable $t ){
+      $resp = $t->getMessage();
+    }
+    catch( \Exception $e ){
+      $resp = $e->getMessage();
+    }
+
+  }
 
 ?>
 
-<!DOCTYPE html>
-<html lang="en" dir="ltr">
-  <head>
-    <meta charset="utf-8">
-    <title>Test Php V-EFD</title>
-  </head>
-  <body>
-    <form method="post">
-      <input name="key" value="04079698" /><br/>
+<em>Still working on the FiscalCode...</em>
+<h1>Test Interface</h1>
+<form>
+  <h4>Api</h4>
+  <select style="display: block; width: 100%;" name="api">
+    <?php foreach( $methods as $r => $n ){ ?>
+      <option value="<?php echo $r; ?>" <?php if($r==$method){ echo "selected"; } ?> ><?php echo $n; ?></option>
+    <?php } ?>
+  </select>
 
-      <h3>Stage One</h3>
-      <input name="one_conf" placeholder="device,serial,bus_id" /><br/>
-      <p>
-        <b>E.G: </b>
-        <b>(</b> 520404079698,000000,R-R-01 <b>)</b>
-      </p>
-      <textarea name="one_data" rows="10" cols="50" >{"license": "520404079698", "sn": "LAMASAT INTERNATIONAL LTD", "sw_version": "1.2", "model": "IP-100", "manufacture": "Inspur", "imei": "100159197500000", "os": "linux2.6.36", "hw_sn": ""}</textarea><br/>
+  <br/>
+  <h4>Business Data</h4>
+  <textarea style="width: 100%; height: 200px;" name="data"><?php echo $data; ?></textarea>
 
-      <h3>Stage Three</h3>
-      <input name="two_conf" placeholder="device,serial,bus_id" /><br/>
-      <p>
-        <b>E.G: </b>
-        <b>(</b> 010100001129,000000,R-R-02 <b>)</b>
-      </p>
-      <textarea name="two_data" rows="10" cols="50" >{"id": "010100001129"}</textarea><br/>
+  <br/>
+  <h4>Response</h4>
+  <textarea style="width: 100%; height: 200px;"><?php echo json_encode( $resp, JSON_PRETTY_PRINT ); ?></textarea>
 
-      <br/>
-      <input type="submit" value="SUBMIT" name="done" />
-    </form>
-  </body>
-</html>
+  <br/><br/>
+  <input type="submit" name="submit" value="DONE" style="width: 100%; height: 40px;" />
+</form>
