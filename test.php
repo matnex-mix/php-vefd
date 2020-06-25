@@ -1,5 +1,5 @@
 <?php
-  require 'worker.php';
+  require 'PHP-Vefd/worker.php';
 
   $worker = new EFDWorker();
 
@@ -28,74 +28,46 @@
   #$worker->notifySuccess( $common );
   #$worker->invoiceApp( $common );
   #$worker->taxInfoMod( $common );
-  /*$worker->invoiceUpload(array(
+  $worker->invoiceUpload(array(
     "id" => $common['id'],
     #"POS-SN" => "092344823532",
     "declaration-info" => array(
       "invoice-code" => "16130010",
       "invoice-number" => "000017210020",
-      "buyer-tpin" => "100022473",
+      /*"buyer-tpin" => "100022473",
       "buyer-vat-acc-name" => "40168862",
       "buyer-name" => "Baidu",
       "buyer-address" => "Beijing, China",
-      "buyer-tel" => "400-860-0011",
+      "buyer-tel" => "400-860-0011",*/
       "tax-amount" => 1.3,
       "total-amount" => 10,
-      "total-discount" => 0,
+      #"total-discount" => 0,
       "invoice-status" => "01",
       "invoice-issuer" => "Cashier01",
       "invoicing-time" => 1503991003,
-      "old-invoice-code" => "",
+      /*"old-invoice-code" => "",
       "old-invoice-number" => "",
-      "memo" => "value",
+      "memo" => "value",*/
       "currency-type" => "USD",
       "conversion-rate" => 6.5434,
       "sale-type" => 1,
-      "local-purchase-order" => "23423452345342",
-      "voucher-PIN" => "0983773823442",
+      #"local-purchase-order" => "23423452345342",
+      #"voucher-PIN" => "0983773823442",
       "items-info" => [
         array(
           "no" => 1,
           "tax-category-code" => "A",
           "tax-category-name" => "Standard Rate",
           "name" =>"apple",
-          "barcode" =>"6009706160821",
+          #"barcode" =>"6009706160821",
           "count" => 1.00,
           "amount" => 10.00,
           "tax-amount" => 1.30,
-          "discount" => 0,
+          #"discount" => 0,
           "unit-price" => 10.00,
           "tax-rate" => 0.15,
-          "rrp" => 12.00
+          #"rrp" => 12.00
         ),
-        array(
-          "no" => 2,
-          "tax-category-code" => "B",
-          "tax-category-name" => "MTV",
-          "name" =>"pear",
-          "barcode" =>"6009706160821",
-          "count" => 1.00,
-          "amount" => 10.00,
-          "tax-amount" => 1.30,
-          "discount" => 0,
-          "unit-price" => 10.00,
-          "tax-rate" => 0.15,
-          "rrp" => 12.00
-        ),
-        array(
-          "no" => 3,
-          "tax-category-code" => "A",
-          "tax-category-name" => "Standard Rate",
-          "name" =>"pear",
-          "barcode" => "6009706160821",
-          "count" => 1.00,
-          "amount" => 10.00,
-          "tax-amount" => 1.30,
-          "discount" => 0,
-          "unit-price" => 10.00,
-          "tax-rate" => 0.15,
-          "rrp" => 12.00
-        )
       ],
       "tax-info" => [
         array(
@@ -104,21 +76,9 @@
           "tax-rate" => 0.16,
           "tax-value" => 100
         ),
-        array(
-          "tax-code" => "C1",
-          "tax-name" => "export",
-          "tax-rate" => 0,
-          "tax-value" => 0
-        ),
-        array(
-          "tax-code" => "T",
-          "tax-name" => "Tourism Levy",
-          "tax-rate" => 0.015,
-          "tax-value" => 30
-        )
       ]
     ))
-  );*/
+  );
   /*$worker->invoiceQuery([
     'id' => $common['id'],
     'code' => '08764738223',

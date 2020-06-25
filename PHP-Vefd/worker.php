@@ -1,5 +1,7 @@
 <?php
 
+  date_default_timezone_set("Africa/Lusaka");
+
   require('rsa.php');
   require('des.php');
   require('curl.php');
@@ -15,6 +17,7 @@
     private $AutoKey;
     private $des;
     private $http;
+    private $TaxpayerInfo;
 
     public function __construct(){
 
@@ -61,6 +64,8 @@
 
         $this->des = new DES($this->AutoKey, 'DES-ECB', DES::OUTPUT_BASE64);
         $this->RealKey = preg_replace( '/(-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n)/', '', $this->Key );
+
+        $this->loadInfo( __DIR__.'/cache/.info' );
       }
     }
 
@@ -78,6 +83,12 @@
       } else {
         return $this->error( "Could not open ($filename), do you have permission to view it." );
       }
+    }
+
+    # Load Tax Information
+    private function loadInfo( $filename ){
+      $data = $this->des->decrypt( @file_get_contents( $filename ) );
+      $this->TaxpayerInfo = @json_decode( $data );
     }
 
     # Set Body
@@ -145,6 +156,10 @@
           if( !empty($match) ){
             $rule = $match[1];
             $values = explode( ',', $match[2] );
+
+            foreach ($values as $key => $value) {
+              $values[$key] = eval("return $value;");
+            }
           }
 
           $rule = "['".preg_replace( '/(\w)\.(\w)/', '$1\'][\'$2', $rule )."']";
@@ -156,10 +171,41 @@
         }
     }
 
-    private function generateFiscal(){
-      $d = new COM('sources/FiscalCode.dll');
-      #print_r( $d );
-      die('');
+    private function generateFiscal( $data ){
+
+      if( empty($this->TaxpayerInfo) ){
+        $this->error('Could not find a valid taxpayer details');
+      }
+
+      $tpin = str_pad( $this->TaxpayerInfo->taxpayer->tpin, 18, "0", STR_PAD_LEFT );
+      $inv_code = $data['declaration-info']['invoice-code'];
+      $inv_num = str_pad( $data['declaration-info']['invoice-number'], 8, "0", STR_PAD_LEFT );
+      $inv_time = Date( 'YmdHis', $data['declaration-info']['invoicing-time'] );
+      $tid = $data['id'];
+      $amount = str_pad( $data['declaration-info']['total-amount'], 20, "0", STR_PAD_LEFT );
+      $pri_key = $this->QueryKey;
+
+      echo("
+TPIN (".strlen($tpin)."): $tpin
+INVOICE_CODE (".strlen($inv_code)."): $inv_code
+INVOICE_NUMBER (".strlen($inv_num)."): $inv_num
+INVOICING_TIME (".strlen($inv_time)."): $inv_time
+TERMINAL_ID (".strlen($tid)."): $this->Device
+AMOUNT (".strlen($amount)."): $amount
+PRIVATE_KEY (".strlen($pri_key)."): $pri_key
+\n");
+
+      $file = realpath( __DIR__."/../fiscalcode/fiscal_code.py" );
+      $code = "python $file -t \"$tpin\" -c \"$inv_code\" -n \"$inv_num\" -u \"$inv_time\" -i \"$tid\" -a \"$amount\" -k \"$pri_key\"";
+      print_r( $code );
+      $output = shell_exec($code);
+
+      if( !$output ){
+        $this->error('Could not generate fiscal code');
+      }
+
+      return $output;
+
     }
 
     public function location(){
@@ -173,6 +219,30 @@
       else {
         $this->error('An Error Ocurred!');
       }
+    }
+
+    private function invoiceInfo( $id ){
+      $data = json_decode( $this->des->decrypt( @file_get_contents( __DIR__.'/cache/.invoice' ) ), TRUE );
+
+      if ( empty($data) ){
+        $data = $this->invoiceApp(array( 'id' => $id ))['invoice'];
+        foreach ($data as $key => $val) {
+          $data[$key]['number-last'] = $val['number-begin']-1;
+        }
+        file_put_contents( __DIR__.'/cache/.invoice', $this->des->encrypt( json_encode($data) ) );
+      }
+
+      if( !sizeof($data) ){
+        $this->error('You have no invoice space');
+      } else {
+        foreach ($data as $key => $val) {
+          if( $val['number-last'] = $val['number-end'] ){
+            return $val;
+          }
+        }
+      }
+
+      $this->error('Invoice range exhausted');
     }
 
     # ------------------------------------------------------------------------ #
@@ -309,6 +379,7 @@
      */
 
    public function invoiceUpload( $bus_data ){
+     $this->ensureReady();
      $this->checkRequirements( [
        "id",
        "declaration-info.tax-amount",
@@ -316,22 +387,22 @@
        "declaration-info.invoice-status{'01','02','03'}",
        "declaration-info.invoice-issuer",
        "declaration-info.invoicing-time",
-       "declaration-info.fiscal-code",
+       #"declaration-info.fiscal-code",
        "declaration-info.sale-type{0,1}",
        "declaration-info.currency-type",
        "declaration-info.conversion-rate",
      ], $bus_data );
 
-     $data = $this->invoiceApp(array(
-       'id' => $bus_data['id'],
-     ));
+     $data = $this->invoiceInfo( $bus_data['id'] );
 
      $bus_data['declaration-info']['invoice-code'] = $data['code'];
-     $bus_data['declaration-info']['invoice-number'] = $data['number-begin'];
-     $bus_data['declaration-info']['fiscal-code'] = $this->generateFiscal();
+     $bus_data['declaration-info']['invoice-number'] = $data['number-last']+1;
      $bus_data['declaration-info']['invoicing-time'] = strval(time());
+     $bus_data['declaration-info']['tax-amount'] = number_format(doubleval($bus_data['declaration-info']['tax-amount']), 2, '.', '');
+     $bus_data['declaration-info']['total-amount'] = number_format(doubleval($bus_data['declaration-info']['total-amount']), 2, '.', '');
+     $bus_data['declaration-info']['fiscal-code'] = $this->generateFiscal( $bus_data );
+     #$bus_data['declaration-info']['total-discount'] = ;
 
-     $this->ensureReady();
      $bus_data = $this->prepare( $bus_data );
 
      $content = $this->des->encrypt( $bus_data );
@@ -432,6 +503,7 @@
       ), self::DEBUG );
 
       $finalResult = $this->finalDecoder( $result );
+      file_put_contents( __DIR__.'/cache/.info', $this->des->encrypt(json_encode($finalResult)) );
       return $finalResult;
     }
 
