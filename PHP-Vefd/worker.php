@@ -21,6 +21,8 @@
 
     public function __construct(){
 
+      $this->loadKey( __DIR__.'/cache/.key' );
+
       $this->http = new cURL("http://41.72.108.82:8097/iface/index");
       $this->http->setopt(CURLOPT_HEADER, 0);
       $this->http->setopt(CURLOPT_RETURNTRANSFER, 1);
@@ -183,9 +185,9 @@
       $inv_time = Date( 'YmdHis', $data['declaration-info']['invoicing-time'] );
       $tid = $data['id'];
       $amount = str_pad( $data['declaration-info']['total-amount'], 20, "0", STR_PAD_LEFT );
-      $pri_key = $this->QueryKey;
+      $pri_key = $this->RealKey;
 
-      echo("
+      ("
 TPIN (".strlen($tpin)."): $tpin
 INVOICE_CODE (".strlen($inv_code)."): $inv_code
 INVOICE_NUMBER (".strlen($inv_num)."): $inv_num
@@ -199,6 +201,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
       $code = "python $file -t \"$tpin\" -c \"$inv_code\" -n \"$inv_num\" -u \"$inv_time\" -i \"$tid\" -a \"$amount\" -k \"$pri_key\"";
       print_r( $code );
       $output = shell_exec($code);
+      print_r( "\n".$output );
 
       if( !$output ){
         $this->error('Could not generate fiscal code');
@@ -323,6 +326,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
 
       $this->Tid = $stepTwoResult['id'];
       $this->Key = "-----BEGIN PRIVATE KEY-----\n".wordwrap( $stepTwoResult['secret'], 64 )."\n-----END PRIVATE KEY-----";
+      $this->downloadKey( __DIR__.'/cache/.key' );
 
       return $this;
     }
