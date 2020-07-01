@@ -187,7 +187,7 @@
       $amount = str_pad( $data['declaration-info']['total-amount'], 20, "0", STR_PAD_LEFT );
       $pri_key = $this->RealKey;
 
-      ("
+      echo ("
 TPIN (".strlen($tpin)."): $tpin
 INVOICE_CODE (".strlen($inv_code)."): $inv_code
 INVOICE_NUMBER (".strlen($inv_num)."): $inv_num
