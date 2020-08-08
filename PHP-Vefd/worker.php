@@ -18,6 +18,7 @@
     private $des;
     private $http;
     private $TaxpayerInfo;
+    private $invoiceCache;
 
     public function __construct(){
 
@@ -31,6 +32,12 @@
         'Content-Type: application/json;Charset=utf-8',
         'Host: 211.90.56.2'
       ));
+
+      $this->Device = @file_get_contents( __DIR__.'/cache/.tid' );
+      $this->Serial = '000000';
+
+      $this->ensureReady();
+      $this->loadInfo( __DIR__.'/cache/.info' );
 
     }
 
@@ -66,8 +73,6 @@
 
         $this->des = new DES($this->AutoKey, 'DES-ECB', DES::OUTPUT_BASE64);
         $this->RealKey = preg_replace( '/(-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\n)/', '', $this->Key );
-
-        $this->loadInfo( __DIR__.'/cache/.info' );
       }
     }
 
@@ -127,6 +132,7 @@
     }
 
     private function prepare( $data ){
+      $data['id'] ?? ($data['id'] = $this->Device);
       $format = preg_replace( '/(:|,)/', '$1 ', str_replace( '"', '\'', json_encode( $data ) ) );
       return $format;
     }
@@ -183,11 +189,11 @@
       $inv_code = $data['declaration-info']['invoice-code'];
       $inv_num = str_pad( $data['declaration-info']['invoice-number'], 8, "0", STR_PAD_LEFT );
       $inv_time = Date( 'YmdHis', $data['declaration-info']['invoicing-time'] );
-      $tid = $data['id'];
+      $tid = $this->Device;
       $amount = str_pad( $data['declaration-info']['total-amount'], 20, "0", STR_PAD_LEFT );
       $pri_key = $this->RealKey;
 
-      echo ("
+      ("
 TPIN (".strlen($tpin)."): $tpin
 INVOICE_CODE (".strlen($inv_code)."): $inv_code
 INVOICE_NUMBER (".strlen($inv_num)."): $inv_num
@@ -199,9 +205,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
 
       $file = realpath( __DIR__."/../fiscalcode/fiscal_code.py" );
       $code = "python $file -t \"$tpin\" -c \"$inv_code\" -n \"$inv_num\" -u \"$inv_time\" -i \"$tid\" -a \"$amount\" -k \"$pri_key\"";
-      print_r( $code );
-      $output = shell_exec($code);
-      print_r( "\n".$output );
+      $output = trim( shell_exec($code) );
 
       if( !$output ){
         $this->error('Could not generate fiscal code');
@@ -224,28 +228,39 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
       }
     }
 
-    private function invoiceInfo( $id ){
-      $data = json_decode( $this->des->decrypt( @file_get_contents( __DIR__.'/cache/.invoice' ) ), TRUE );
+    private function invoiceInfo( $enforce=false ){
+      $inv = ($this->invoiceCache ?? @$this->invoiceApp(array())['invoice']);
 
-      if ( empty($data) ){
-        $data = $this->invoiceApp(array( 'id' => $id ))['invoice'];
-        foreach ($data as $key => $val) {
-          $data[$key]['number-last'] = $val['number-begin']-1;
-        }
-        file_put_contents( __DIR__.'/cache/.invoice', $this->des->encrypt( json_encode($data) ) );
-      }
-
-      if( !sizeof($data) ){
+      if( !sizeof($inv) ){
         $this->error('You have no invoice space');
       } else {
-        foreach ($data as $key => $val) {
-          if( $val['number-last'] = $val['number-end'] ){
-            return $val;
+        $_inv = [];
+        foreach( $inv as $v ){
+          for ($i=0; $i < $v['number-end']-$v['number-begin']+1; $i++) {
+          $_inv[] = array(
+            'code' => $v['code'],
+            'number-begin' => $v['number-begin']+$i,
+            'number-end' => $v['number-begin']+$i,
+          );
           }
+        }
+
+        $this->invoiceCache = $_inv;
+        $inv = current($inv);
+        if( $inv ){
+          return array(
+            'code' => $inv['code'],
+            'number' => $inv['number-begin'],
+          );
         }
       }
 
       $this->error('Invoice range exhausted');
+    }
+
+    public function test(){
+      $this->ensureReady();
+      return $this->invoiceInfo(true);
     }
 
     # ------------------------------------------------------------------------ #
@@ -258,7 +273,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function alarmNotify( $bus_data ){
-      $this->checkRequirements( [ "id", "level", "info" ], $bus_data );
+      $this->checkRequirements( [ /*"id",*/ "level", "info" ], $bus_data );
       $this->ensureReady();
       $bus_data['time'] = strval(time());
       $bus_data = $this->prepare( $bus_data );
@@ -281,7 +296,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function hMonitor( $bus_data ){
-      $this->checkRequirements( [ "id", "sw_version", "batch" ], $bus_data );
+      $this->checkRequirements( [ /*"id",*/ "sw_version", "batch" ], $bus_data );
       $this->ensureReady();
       if( !empty($this->LocationDetails) ){
         $bus_data['lat'] = round( $this->LocationDetails['latitude'], 6 );
@@ -325,6 +340,8 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
       $stepTwoResult = json_decode( $this->des->decrypt($message), TRUE );
 
       $this->Tid = $stepTwoResult['id'];
+      file_put_contents( __DIR__.'/cache/.tid', $this->Tid );
+
       $this->Key = "-----BEGIN PRIVATE KEY-----\n".wordwrap( $stepTwoResult['secret'], 64 )."\n-----END PRIVATE KEY-----";
       $this->downloadKey( __DIR__.'/cache/.key' );
 
@@ -336,7 +353,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function invoiceApp( $bus_data ){
-      $this->checkRequirements( [ "id" ], $bus_data );
+      #$this->checkRequirements( [ "id" ], $bus_data );
       $this->ensureReady();
       $bus_data = $this->prepare( $bus_data );
 
@@ -358,7 +375,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function invoiceQuery( $bus_data ){
-      $this->checkRequirements( [ "id", "code", "number" ], $bus_data );
+      $this->checkRequirements( [ /*"id",*/ "code", "number" ], $bus_data );
       $bus_data['number'] = strval($bus_data['number']);
       $bus_data['number'] = str_repeat( "0", 8-strlen($bus_data['number']) ).$bus_data['number'];
 
@@ -385,7 +402,6 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
    public function invoiceUpload( $bus_data ){
      $this->ensureReady();
      $this->checkRequirements( [
-       "id",
        "declaration-info.tax-amount",
        "declaration-info.total-amount",
        "declaration-info.invoice-status{'01','02','03'}",
@@ -397,28 +413,34 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
        "declaration-info.conversion-rate",
      ], $bus_data );
 
-     $data = $this->invoiceInfo( $bus_data['id'] );
+     $data = $this->invoiceInfo(true);
 
      $bus_data['declaration-info']['invoice-code'] = $data['code'];
-     $bus_data['declaration-info']['invoice-number'] = $data['number-last']+1;
+     $bus_data['declaration-info']['invoice-number'] = str_pad( $data['number'], 8, "0", STR_PAD_LEFT );
      $bus_data['declaration-info']['invoicing-time'] = strval(time());
      $bus_data['declaration-info']['tax-amount'] = number_format(doubleval($bus_data['declaration-info']['tax-amount']), 2, '.', '');
      $bus_data['declaration-info']['total-amount'] = number_format(doubleval($bus_data['declaration-info']['total-amount']), 2, '.', '');
      $bus_data['declaration-info']['fiscal-code'] = $this->generateFiscal( $bus_data );
      #$bus_data['declaration-info']['total-discount'] = ;
 
+     #print_r( json_encode($bus_data, JSON_PRETTY_PRINT) );
      $bus_data = $this->prepare( $bus_data );
 
      $content = $this->des->encrypt( $bus_data );
      $sign = base64_encode( md5( $content, TRUE ));
 
-     $result = $this->setBody_Run(array(
+     /*$result = $this->setBody_Run(array(
        "bus_id" => "INVOICE-REPORT-R",
        "content" => $content,
        "sign" => $sign,
      ), self::DEBUG );
 
-     $result = $this->finalDecoder( $result );
+     $result = $this->finalDecoder( $result );*/
+     if( true || @$result['desc']=='success' ){
+       @array_shift( $this->invoiceCache );
+       return $data;
+     }
+
      return $result;
    }
 
@@ -427,7 +449,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
     */
 
    public function ipUpdate( $bus_data ){
-     $this->checkRequirements( [ "id" ], $bus_data );
+     #$this->checkRequirements( [ "id" ], $bus_data );
      $this->ensureReady();
      $bus_data = $this->prepare( $bus_data );
 
@@ -449,7 +471,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function notifySuccess( $bus_data ){
-      $this->checkRequirements( [ "id" ], $bus_data );
+      #$this->checkRequirements( [ "id" ], $bus_data );
       $this->ensureReady();
       $bus_data = $this->prepare( $bus_data );
 
@@ -471,7 +493,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function reactivate( $bus_data ){
-      $this->checkRequirements( [ "id" ], $bus_data );
+      #$this->checkRequirements( [ "id" ], $bus_data );
       $this->ensureReady();
       $bus_data = $this->prepare( $bus_data );
 
@@ -493,7 +515,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function taxInfoApply( $bus_data ){
-      $this->checkRequirements( [ "id" ], $bus_data );
+      #$this->checkRequirements( [ "id" ], $bus_data );
       $this->ensureReady( $strict=FALSE );
       $bus_data = $this->prepare($bus_data);
 
@@ -516,7 +538,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function taxInfoMod( $bus_data ){
-      $this->checkRequirements( [ "id" ], $bus_data );
+      #$this->checkRequirements( [ "id" ], $bus_data );
       $this->ensureReady();
       $bus_data = $this->prepare( $bus_data );
 
@@ -538,7 +560,7 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
      */
 
     public function timeSync( $bus_data ){
-      $this->checkRequirements( [ "id" ], $bus_data );
+      #$this->checkRequirements( [ "id" ], $bus_data );
       $this->ensureReady();
       $bus_data = $this->prepare( $bus_data );
 
