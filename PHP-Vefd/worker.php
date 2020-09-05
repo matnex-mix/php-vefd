@@ -20,9 +20,7 @@
     private $TaxpayerInfo;
     private $invoiceCache;
 
-    public function __construct(){
-
-      $this->loadKey( __DIR__.'/cache/.key' );
+    public function __construct( $tid, $serial='000000' ){
 
       $this->http = new cURL("http://41.72.108.82:8097/iface/index");
       $this->http->setopt(CURLOPT_HEADER, 0);
@@ -33,11 +31,10 @@
         'Host: 211.90.56.2'
       ));
 
-      $this->Device = @file_get_contents( __DIR__.'/cache/.tid' );
-      $this->Serial = '000000';
+      $this->Device = $tid;
+      $this->Serial = $serial;
 
-      $this->ensureReady();
-      $this->loadInfo( __DIR__.'/cache/.info' );
+      $this->ensureReady( FALSE );
 
     }
 
@@ -83,18 +80,12 @@
     }
 
     # Load Key
-    public function loadKey( $filename ){
-      $file = @file_get_contents( $filename );
-      if( $file ){
-        $this->Key = $file;
-      } else {
-        return $this->error( "Could not open ($filename), do you have permission to view it." );
-      }
+    public function loadKey( $string ){
+      $this->Key = $string;
     }
 
     # Load Tax Information
-    private function loadInfo( $filename ){
-      $data = $this->des->decrypt( @file_get_contents( $filename ) );
+    private function loadInfo( $data ){
       $this->TaxpayerInfo = @json_decode( $data );
     }
 
@@ -258,11 +249,6 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
       $this->error('Invoice range exhausted');
     }
 
-    public function test(){
-      $this->ensureReady();
-      return $this->invoiceInfo(true);
-    }
-
     # ------------------------------------------------------------------------ #
     #  API METHODS
     # ------------------------------------------------------------------------ #
@@ -339,11 +325,9 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
       $message = $this->stepOneResult['content'];
       $stepTwoResult = json_decode( $this->des->decrypt($message), TRUE );
 
+      print_r( $stepTwoResult );
       $this->Tid = $stepTwoResult['id'];
-      file_put_contents( __DIR__.'/cache/.tid', $this->Tid );
-
       $this->Key = "-----BEGIN PRIVATE KEY-----\n".wordwrap( $stepTwoResult['secret'], 64 )."\n-----END PRIVATE KEY-----";
-      $this->downloadKey( __DIR__.'/cache/.key' );
 
       return $this;
     }
@@ -529,7 +513,6 @@ PRIVATE_KEY (".strlen($pri_key)."): $pri_key
       ), self::DEBUG );
 
       $finalResult = $this->finalDecoder( $result );
-      file_put_contents( __DIR__.'/cache/.info', $this->des->encrypt(json_encode($finalResult)) );
       return $finalResult;
     }
 

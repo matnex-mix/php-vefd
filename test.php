@@ -10,7 +10,24 @@
   # while testing please not that you don't have to reload this test.php page so as not to waste the invoice range allocated
 
   # It is important to instantiaze the Worker class like this before performing any operation
-  $worker = new EFDWorker();
+  $tpin = '010100001129';
+  $tpin = '520404079698';
+  $worker = new EFDWorker( $tpin );
+
+  print_r(
+    $worker->init([
+      "license" => "520404079698",
+      "sn" => "187603000010",
+      "sw_version" => "1.2",
+      "model" => "IP-100",
+      "manufacture" => "Inspur",
+      "imei" => "359833002198832",
+      "os" => "linux2.6.36",
+      "hw_sn" => "3458392322" 
+    ])
+  );
+
+  die('');
 
   # Show tax information from server
   echo "\n\nTAX INFO APPLY RESPONSE:\n\n";
